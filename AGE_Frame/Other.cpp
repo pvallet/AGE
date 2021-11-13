@@ -1412,7 +1412,7 @@ void AGE_Frame::OnMenuOption(wxCommandEvent &event)
         case eVasili:
         {
 #ifdef WIN32
-            EmptyWorkingSet(GetCurrentProcess());
+            //EmptyWorkingSet(GetCurrentProcess());
 #endif
             break;
         }
@@ -1775,13 +1775,14 @@ void AGE_Frame::OnMenuOption(wxCommandEvent &event)
             slp_csv.Clear();
             obj_csv.Clear();
 
-            slp_csv.AddLine("SLP,PicFilename,Name,NumFrames,NumFacets,AnimDuration,ReplayDelay");
+            slp_csv.AddLine("SLP,PicFilename,Name,Layer,NumFrames,NumFacets,AnimDuration,ReplayDelay");
             for(size_t sprite = 0; sprite < dataset->Graphics.size(); ++sprite)
             if(dataset->GraphicPointers[sprite])
             {
                 slp_csv.AddLine(lexical_cast<std::string>(dataset->Graphics[sprite].SLP)
                             +','+dataset->Graphics[sprite].FileName
                             +','+dataset->Graphics[sprite].Name
+                            +','+lexical_cast<std::string>((int)dataset->Graphics[sprite].Layer)
                             +','+lexical_cast<std::string>(dataset->Graphics[sprite].FrameCount)
                             +','+lexical_cast<std::string>(dataset->Graphics[sprite].AngleCount)
                             +','+lexical_cast<std::string>(dataset->Graphics[sprite].AnimationDuration)
@@ -1790,8 +1791,8 @@ void AGE_Frame::OnMenuOption(wxCommandEvent &event)
 
             size_t unit, civ, depth = 0;
             obj_csv.AddLine("Civ,IconSet,UnitID,UnitName,LangName,"
-                "Name,PicFilename,Layer,NumFrames,NumFacets");
-            std::function<void(size_t)> sprite_checker = [&](size_t sprite)
+                "Name,PicFilename,DeadUnitID,AnimType");
+            std::function<void(size_t, const std::string&)> sprite_checker = [&](size_t sprite, const std::string& animType)
             {
                 ++depth;
                 if(sprite < dataset->Graphics.size() && dataset->GraphicPointers[sprite])
@@ -1803,17 +1804,15 @@ void AGE_Frame::OnMenuOption(wxCommandEvent &event)
                             +','+lexical_cast<std::string>(unit)
                             +','+dataset->Civs[civ].Units[unit].Name
                             +','+TranslatedText(dataset->Civs[civ].Units[unit].LanguageDLLName, 24)
-                            //+','+lexical_cast<std::string>((int)dataset->Civs[civ].Units[unit].OcclusionMode)
                             +','+dataset->Graphics[sprite].Name
                             +','+dataset->Graphics[sprite].FileName
-                            +','+lexical_cast<std::string>((int)dataset->Graphics[sprite].Layer)
-                            +','+lexical_cast<std::string>(dataset->Graphics[sprite].FrameCount)
-                            +','+lexical_cast<std::string>(dataset->Graphics[sprite].AngleCount));
+                            +','+lexical_cast<std::string>((int)dataset->Civs[civ].Units[unit].DeadUnitID)
+                            +','+animType);
                     }
                     if(depth == 1)
                     for(size_t delta = 0; delta < dataset->Graphics[sprite].Deltas.size(); ++delta)
                     {
-                        sprite_checker(dataset->Graphics[sprite].Deltas[delta].GraphicID);
+                        sprite_checker(dataset->Graphics[sprite].Deltas[delta].GraphicID, "");
                     }
                 }
                 --depth;
@@ -1840,48 +1839,48 @@ void AGE_Frame::OnMenuOption(wxCommandEvent &event)
                     if(dataset->Civs[civ].UnitPointers[unit] != 0)
                     {
                         // Gather information about all the graphics unit uses.
-                        sprite_checker(dataset->Civs[civ].Units[unit].StandingGraphic.first);
-                        sprite_checker(dataset->Civs[civ].Units[unit].StandingGraphic.second);
-                        sprite_checker(dataset->Civs[civ].Units[unit].DyingGraphic);
-                        sprite_checker(dataset->Civs[civ].Units[unit].UndeadGraphic);
+                        sprite_checker(dataset->Civs[civ].Units[unit].StandingGraphic.first, "STAND_1");
+                        sprite_checker(dataset->Civs[civ].Units[unit].StandingGraphic.second, "STAND_2");
+                        sprite_checker(dataset->Civs[civ].Units[unit].DyingGraphic, "DIE");
+                        sprite_checker(dataset->Civs[civ].Units[unit].UndeadGraphic, "UNDEAD");
                         for(size_t sprite = 0; sprite < dataset->Civs[civ].Units[unit].DamageGraphics.size(); ++sprite)
                         {
-                            sprite_checker(dataset->Civs[civ].Units[unit].DamageGraphics[sprite].GraphicID);
+                            sprite_checker(dataset->Civs[civ].Units[unit].DamageGraphics[sprite].GraphicID, "DAMAGE_" + std::to_string(sprite));
                         }
                         switch((short)dataset->Civs[civ].Units[unit].Type)
                         {
                             case 80:
-                            sprite_checker(dataset->Civs[civ].Units[unit].Building.ConstructionGraphicID);
-                            sprite_checker(dataset->Civs[civ].Units[unit].Building.DestructionGraphicID);
-                            sprite_checker(dataset->Civs[civ].Units[unit].Building.DestructionRubbleGraphicID);
-                            sprite_checker(dataset->Civs[civ].Units[unit].Building.SnowGraphicID);
+                            sprite_checker(dataset->Civs[civ].Units[unit].Building.ConstructionGraphicID, "CONSTRUCTION");
+                            sprite_checker(dataset->Civs[civ].Units[unit].Building.DestructionGraphicID, "DESTRUCTION");
+                            sprite_checker(dataset->Civs[civ].Units[unit].Building.DestructionRubbleGraphicID, "RUBBLE");
+                            sprite_checker(dataset->Civs[civ].Units[unit].Building.SnowGraphicID, "SNOW");
                             case 70:
-                            sprite_checker(dataset->Civs[civ].Units[unit].Creatable.GarrisonGraphic);
-                            sprite_checker(dataset->Civs[civ].Units[unit].Creatable.SpecialGraphic);
+                            sprite_checker(dataset->Civs[civ].Units[unit].Creatable.GarrisonGraphic, "GARRISON");
+                            sprite_checker(dataset->Civs[civ].Units[unit].Creatable.SpecialGraphic, "SPECIAL");
                             case 60:
                             case 50:
-                            sprite_checker(dataset->Civs[civ].Units[unit].Type50.AttackGraphic);
+                            sprite_checker(dataset->Civs[civ].Units[unit].Type50.AttackGraphic, "ATTACK");
                             case 40:
                             if(GenieVersion != genie::GV_RoR && GameVersion != EV_Tapsa)
                             {
                                 for(size_t task = 0; task < dataset->UnitHeaders[unit].TaskList.size(); ++task)
                                 {
-                                    sprite_checker(dataset->UnitHeaders[unit].TaskList[task].MovingGraphicID);
-                                    sprite_checker(dataset->UnitHeaders[unit].TaskList[task].ProceedingGraphicID);
-                                    sprite_checker(dataset->UnitHeaders[unit].TaskList[task].WorkingGraphicID);
-                                    sprite_checker(dataset->UnitHeaders[unit].TaskList[task].CarryingGraphicID);
+                                    sprite_checker(dataset->UnitHeaders[unit].TaskList[task].MovingGraphicID, "TASK_MOVE_" + std::to_string(task));
+                                    sprite_checker(dataset->UnitHeaders[unit].TaskList[task].ProceedingGraphicID, "TASK_PROCEED_" + std::to_string(task));
+                                    sprite_checker(dataset->UnitHeaders[unit].TaskList[task].WorkingGraphicID, "TASK_WORK_" + std::to_string(task));
+                                    sprite_checker(dataset->UnitHeaders[unit].TaskList[task].CarryingGraphicID, "TASK_CARRY_" + std::to_string(task));
                                 }
                             }
                             else for(size_t task = 0; task < dataset->Civs[civ].Units[unit].Bird.TaskList.size(); ++task)
                             {
-                                sprite_checker(dataset->Civs[civ].Units[unit].Bird.TaskList[task].MovingGraphicID);
-                                sprite_checker(dataset->Civs[civ].Units[unit].Bird.TaskList[task].ProceedingGraphicID);
-                                sprite_checker(dataset->Civs[civ].Units[unit].Bird.TaskList[task].WorkingGraphicID);
-                                sprite_checker(dataset->Civs[civ].Units[unit].Bird.TaskList[task].CarryingGraphicID);
+                                sprite_checker(dataset->Civs[civ].Units[unit].Bird.TaskList[task].MovingGraphicID, "TASK_MOVE_" + std::to_string(task));
+                                sprite_checker(dataset->Civs[civ].Units[unit].Bird.TaskList[task].ProceedingGraphicID, "TASK_PROCEED_" + std::to_string(task));
+                                sprite_checker(dataset->Civs[civ].Units[unit].Bird.TaskList[task].WorkingGraphicID, "TASK_WORK_" + std::to_string(task));
+                                sprite_checker(dataset->Civs[civ].Units[unit].Bird.TaskList[task].CarryingGraphicID, "TASK_CARRY_" + std::to_string(task));
                             }
                             case 30:
-                            sprite_checker(dataset->Civs[civ].Units[unit].DeadFish.WalkingGraphic);
-                            sprite_checker(dataset->Civs[civ].Units[unit].DeadFish.RunningGraphic);
+                            sprite_checker(dataset->Civs[civ].Units[unit].DeadFish.WalkingGraphic, "WALK");
+                            sprite_checker(dataset->Civs[civ].Units[unit].DeadFish.RunningGraphic, "RUN");
                         }
                     }
                 }
@@ -2164,7 +2163,7 @@ void AGE_Frame::OnExit(wxCloseEvent &event)
         Config.Write("Interface/DrawCollisionShape", DrawCollisionShape);
         Config.Write("Interface/DrawClearanceShape", DrawClearanceShape);
         Config.Write("Interface/DrawSelectionShape", DrawOutline);
-        Config.Write("Interface/CacheSizeMB", GG::cache_size / 1000000u);
+        //Config.Write("Interface/CacheSizeMB", GG::cache_size / 1000000u);
         Config.Write("Interface/ViewPosX", ViewPosX);
         Config.Write("Interface/ViewPosY", ViewPosY);
         Config.Write("Interface/BoxWidthMultiplier", boxWidthMultiplier);
